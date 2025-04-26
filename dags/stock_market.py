@@ -3,10 +3,12 @@ from airflow.operators.python import PythonOperator
 from airflow.hooks.base import BaseHook
 from airflow.sensors.base import PokeReturnValue
 from airflow.providers.docker.operators.docker import DockerOperator
+from airflow.providers.slack.notifications.slack import SlackNotifier
 from datetime import datetime
 from astro import sql as aql
 from astro.files import File
 from astro.sql.table import Table, Metadata
+
 
 from include.stock_market.tasks import _get_stock_prices, _store_stock_prices, _get_formatted_csv, BUCKET_NAME
 
@@ -16,7 +18,17 @@ SYMBOL = "TLSA"
     start_date=datetime(2025, 4, 23),
     schedule='@daily',
     catchup=False,
-    tags=['stock_market']
+    tags=['stock_market'],
+    on_success_callback=SlackNotifier(
+        slack_conn_id="slack_conn",
+        text="The DAG stock_market has completed.",
+        channel="general"
+    ),
+    on_failure_callback=SlackNotifier(
+        slack_conn_id="slack_conn",
+        text="The DAG stock_market has failed.",
+        channel="general"
+    )
 )
 def stock_market():
 
@@ -89,7 +101,6 @@ def stock_market():
         }
     )
 
-    is_api_available_task >> get_stock_prices_task >> store_prices_task
-    store_prices_task >> format_prices_task >> get_formatted_csv_task >> load_to_dw_task
+    is_api_available_task >> get_stock_prices_task >> store_prices_task >> format_prices_task >> get_formatted_csv_task >> load_to_dw_task
 
 stock_market = stock_market()
